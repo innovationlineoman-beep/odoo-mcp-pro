@@ -13,6 +13,8 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import Request
+
+from ..usage import track_event
 from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
@@ -243,9 +245,9 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
         error = request.query_params.get("error")
 
         if error:
-            logger.warning(
-                f"OAuth error: {error} - {request.query_params.get('error_description', '')}"
-            )
+            error_desc = request.query_params.get('error_description', '')
+            logger.warning(f"OAuth error: {error} - {error_desc}")
+            track_event("auth_callback_error", properties={"error": error, "description": error_desc})
             templates = request.app.state.templates
             return templates.TemplateResponse(
                 "access_denied.html",
@@ -254,12 +256,14 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
             )
 
         if not code or not state:
+            track_event("auth_callback_error", properties={"error": "missing_code_or_state"})
             return RedirectResponse(url="/admin/login", status_code=302)
 
         # Validate state and get PKCE verifier
         pending = _pending_auth.pop(state, None)
         if not pending:
-            logger.warning("Invalid or expired OAuth state")
+            logger.warning(f"Invalid or expired OAuth state (pending_count={len(_pending_auth)})")
+            track_event("auth_state_invalid", properties={"pending_count": len(_pending_auth)})
             return RedirectResponse(url="/admin/login", status_code=302)
 
         # Exchange code for tokens
@@ -282,6 +286,7 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
                 logger.error(
                     f"Token exchange failed: {token_response.status_code} {token_response.text}"
                 )
+                track_event("auth_token_exchange_failed", properties={"status": token_response.status_code})
                 templates = request.app.state.templates
                 return templates.TemplateResponse(
                     "access_denied.html",
@@ -292,6 +297,7 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
             token_data = token_response.json()
         except Exception as e:
             logger.error(f"Token exchange error: {e}")
+            track_event("auth_token_exchange_failed", properties={"error": str(e)[:200]})
             return RedirectResponse(url="/admin/login", status_code=302)
 
         # Get user info from Zitadel
@@ -308,12 +314,13 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
 
             if userinfo_response.status_code != 200:
                 logger.error(f"Userinfo failed: {userinfo_response.status_code}")
+                track_event("auth_userinfo_failed", properties={"status": userinfo_response.status_code})
                 return RedirectResponse(url="/admin/login", status_code=302)
 
             userinfo = userinfo_response.json()
-            logger.info(f"Userinfo response keys: {list(userinfo.keys())}")
         except Exception as e:
             logger.error(f"Userinfo error: {e}")
+            track_event("auth_userinfo_failed", properties={"error": str(e)[:200]})
             return RedirectResponse(url="/admin/login", status_code=302)
 
         zitadel_sub = userinfo.get("sub", "")
@@ -340,6 +347,7 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
 
         role = "admin" if is_admin else "user"
         logger.info(f"{role.capitalize()} logged in: {email} ({zitadel_sub})")
+        track_event("auth_login_success", distinct_id=zitadel_sub, properties={"role": role})
         return response
 
     @app.get("/logout")

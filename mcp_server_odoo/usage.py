@@ -49,6 +49,16 @@ def _get_posthog():
     return _posthog_client if _posthog_client is not False else None
 
 
+def track_event(event: str, distinct_id: str = "server", properties: Optional[dict] = None):
+    """Track a server-side event in PostHog. Fire-and-forget, never raises."""
+    try:
+        ph = _get_posthog()
+        if ph:
+            ph.capture(distinct_id=distinct_id, event=event, properties=properties or {})
+    except Exception:
+        pass
+
+
 class RateLimitExceeded(ValidationError):
     """Raised when a user exceeds their daily call limit."""
 
