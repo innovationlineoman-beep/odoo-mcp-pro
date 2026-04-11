@@ -13,10 +13,10 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import Request
-
-from ..usage import track_event
 from fastapi.responses import RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
+
+from ..usage import track_event
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +178,7 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
 
     # Dev login: set ADMIN_DEV_LOGIN=true for local testing without Zitadel
     if os.getenv("ADMIN_DEV_LOGIN", "").lower() == "true":
+
         @app.get("/login/dev")
         async def admin_dev_login(request: Request):
             """Dev-only: instant admin login without Zitadel."""
@@ -238,11 +239,15 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
     async def admin_callback_options(request: Request):
         """Handle CORS preflight for OAuth callback."""
         from starlette.responses import Response
-        return Response(status_code=200, headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        })
+
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            },
+        )
 
     @app.get("/callback")
     async def admin_callback(request: Request):
@@ -252,9 +257,11 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
         error = request.query_params.get("error")
 
         if error:
-            error_desc = request.query_params.get('error_description', '')
+            error_desc = request.query_params.get("error_description", "")
             logger.warning(f"OAuth error: {error} - {error_desc}")
-            track_event("auth_callback_error", properties={"error": error, "description": error_desc})
+            track_event(
+                "auth_callback_error", properties={"error": error, "description": error_desc}
+            )
             templates = request.app.state.templates
             return templates.TemplateResponse(
                 "access_denied.html",
@@ -274,7 +281,11 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
             templates = request.app.state.templates
             return templates.TemplateResponse(
                 "auth_error.html",
-                {"request": request, "error": "Login session expired. This can happen during a server update. Please try again.", "retry_url": "/admin/login"},
+                {
+                    "request": request,
+                    "error": "Login session expired. This can happen during a server update. Please try again.",
+                    "retry_url": "/admin/login",
+                },
                 status_code=400,
             )
 
@@ -298,7 +309,9 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
                 logger.error(
                     f"Token exchange failed: {token_response.status_code} {token_response.text}"
                 )
-                track_event("auth_token_exchange_failed", properties={"status": token_response.status_code})
+                track_event(
+                    "auth_token_exchange_failed", properties={"status": token_response.status_code}
+                )
                 templates = request.app.state.templates
                 return templates.TemplateResponse(
                     "access_denied.html",
@@ -326,11 +339,17 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
 
             if userinfo_response.status_code != 200:
                 logger.error(f"Userinfo failed: {userinfo_response.status_code}")
-                track_event("auth_userinfo_failed", properties={"status": userinfo_response.status_code})
+                track_event(
+                    "auth_userinfo_failed", properties={"status": userinfo_response.status_code}
+                )
                 templates = request.app.state.templates
                 return templates.TemplateResponse(
                     "auth_error.html",
-                    {"request": request, "error": "Could not retrieve your account information. Please try again.", "retry_url": "/admin/login"},
+                    {
+                        "request": request,
+                        "error": "Could not retrieve your account information. Please try again.",
+                        "retry_url": "/admin/login",
+                    },
                     status_code=502,
                 )
 
@@ -341,7 +360,11 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
             templates = request.app.state.templates
             return templates.TemplateResponse(
                 "auth_error.html",
-                {"request": request, "error": "Login failed due to a temporary error. Please try again.", "retry_url": "/admin/login"},
+                {
+                    "request": request,
+                    "error": "Login failed due to a temporary error. Please try again.",
+                    "retry_url": "/admin/login",
+                },
                 status_code=502,
             )
 

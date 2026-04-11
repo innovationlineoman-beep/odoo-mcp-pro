@@ -117,6 +117,7 @@ def register_admin_routes(app, db_manager):
         # Clean URL: keep only scheme + hostname (strip paths like /web, /odoo, etc.)
         if odoo_url:
             from urllib.parse import urlparse
+
             parsed = urlparse(odoo_url)
             if parsed.scheme and parsed.hostname:
                 port_str = f":{parsed.port}" if parsed.port and parsed.port not in (80, 443) else ""
@@ -146,6 +147,7 @@ def register_admin_routes(app, db_manager):
             )
             # Auto-save as profile (label = domain name)
             from urllib.parse import urlparse
+
             label = form.get("profile_label", "").strip()
             if not label:
                 parsed_host = urlparse(odoo_url).hostname or odoo_url
@@ -240,11 +242,11 @@ def register_admin_routes(app, db_manager):
     @require_login
     async def setup_verify(request: Request):
         """Verify the user's Odoo connection and store debug info."""
-        from ..version_detect import detect_api_version
         from ..config import OdooConfig
         from ..odoo_connection import OdooConnection
         from ..odoo_json2_connection import OdooJSON2Connection
         from ..performance import PerformanceManager
+        from ..version_detect import detect_api_version
 
         user = request.state.user
         form = await request.form()
@@ -302,7 +304,9 @@ def register_admin_routes(app, db_manager):
             conn.authenticate()
 
             if conn.is_authenticated:
-                logger.info(f"Verify OK for {user['email']}: {odoo_version} ({odoo_hosting}), UID={conn.uid}")
+                logger.info(
+                    f"Verify OK for {user['email']}: {odoo_version} ({odoo_hosting}), UID={conn.uid}"
+                )
             else:
                 if api_version == "xmlrpc":
                     error_msg = (
@@ -420,7 +424,9 @@ def register_admin_routes(app, db_manager):
             email=email,
             invited_by=user["sub"],
         )
-        logger.info(f"Team invite created by {user['email']} for {email} (token: {invite.invite_token[:8]}...)")
+        logger.info(
+            f"Team invite created by {user['email']} for {email} (token: {invite.invite_token[:8]}...)"
+        )
         return RedirectResponse(url="/admin/team", status_code=302)
 
     @app.post("/team/revoke-invite")
@@ -484,19 +490,43 @@ def register_admin_routes(app, db_manager):
         if not invite:
             return templates.TemplateResponse(
                 "invite_accept.html",
-                {"request": request, "user": user, "is_admin": False, "error": "Invite not found.", "invite": None, "team": None, "active_nav": None},
+                {
+                    "request": request,
+                    "user": user,
+                    "is_admin": False,
+                    "error": "Invite not found.",
+                    "invite": None,
+                    "team": None,
+                    "active_nav": None,
+                },
             )
 
         if invite.is_accepted:
             return templates.TemplateResponse(
                 "invite_accept.html",
-                {"request": request, "user": user, "is_admin": False, "error": "This invite has already been used.", "invite": None, "team": None, "active_nav": None},
+                {
+                    "request": request,
+                    "user": user,
+                    "is_admin": False,
+                    "error": "This invite has already been used.",
+                    "invite": None,
+                    "team": None,
+                    "active_nav": None,
+                },
             )
 
         if invite.is_expired:
             return templates.TemplateResponse(
                 "invite_accept.html",
-                {"request": request, "user": user, "is_admin": False, "error": "This invite has expired.", "invite": None, "team": None, "active_nav": None},
+                {
+                    "request": request,
+                    "user": user,
+                    "is_admin": False,
+                    "error": "This invite has expired.",
+                    "invite": None,
+                    "team": None,
+                    "active_nav": None,
+                },
             )
 
         team = await db_manager.get_team_by_id(invite.team_id)
@@ -545,7 +575,9 @@ def register_admin_routes(app, db_manager):
             async with db_manager._pool.acquire() as conn:
                 await conn.execute(
                     "UPDATE user_connections SET team_id = $1, team_role = 'member', odoo_url = $2, updated_at = NOW() WHERE zitadel_sub = $3",
-                    team.id, team.odoo_url, user["sub"],
+                    team.id,
+                    team.odoo_url,
+                    user["sub"],
                 )
         # If no connection yet, they'll set it up on the setup page (team_id will be assigned via upsert)
 

@@ -30,6 +30,7 @@ def _init_posthog():
         return None
     try:
         from posthog import Posthog
+
         client = Posthog(api_key, host="https://eu.i.posthog.com")
         logger.info("PostHog analytics enabled")
         return client
@@ -66,8 +67,7 @@ class RateLimitExceeded(ValidationError):
         self.limit = limit
         self.used = used
         super().__init__(
-            f"Daily rate limit exceeded: {used}/{limit} calls used today. "
-            f"Resets at midnight UTC."
+            f"Daily rate limit exceeded: {used}/{limit} calls used today. Resets at midnight UTC."
         )
 
 

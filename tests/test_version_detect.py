@@ -286,7 +286,7 @@ class TestConfigAutoApiVersion:
         """ODOO_API_VERSION env var should not affect config."""
         import os
 
-        from mcp_server_odoo.config import OdooConfig, load_config, reset_config
+        from mcp_server_odoo.config import load_config, reset_config
 
         reset_config()
         # Even if the env var is set, load_config ignores it

@@ -28,9 +28,9 @@ from .logging_config import get_logger, logging_config, perf_logger
 from .odoo_connection import OdooConnection
 from .odoo_json2_connection import OdooJSON2Connection
 from .performance import PerformanceManager
-from .version_detect import detect_api_version
 from .resources import register_resources
 from .tools import register_tools
+from .version_detect import detect_api_version
 
 # Set up logging
 logger = get_logger(__name__)

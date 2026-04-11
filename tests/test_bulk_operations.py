@@ -1,6 +1,6 @@
 """Tests for bulk CRUD operations."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -61,9 +61,7 @@ class TestBulkCreate:
         """Single-item list should still work."""
         mock_connection.create_bulk.return_value = [42]
 
-        result = await handler._handle_create_records_tool(
-            "res.partner", [{"name": "Solo"}]
-        )
+        result = await handler._handle_create_records_tool("res.partner", [{"name": "Solo"}])
 
         assert result["created_ids"] == [42]
         assert result["count"] == 1
@@ -98,14 +96,10 @@ class TestBulkCreate:
         from mcp_server_odoo.access_control import AccessControlError
         from mcp_server_odoo.error_handling import ValidationError
 
-        mock_access_controller.validate_model_access.side_effect = AccessControlError(
-            "Not allowed"
-        )
+        mock_access_controller.validate_model_access.side_effect = AccessControlError("Not allowed")
 
         with pytest.raises(ValidationError, match="Access denied"):
-            await handler._handle_create_records_tool(
-                "res.partner", [{"name": "test"}]
-            )
+            await handler._handle_create_records_tool("res.partner", [{"name": "test"}])
 
 
 class TestBulkUpdate:
@@ -129,9 +123,7 @@ class TestBulkUpdate:
         from mcp_server_odoo.error_handling import ValidationError
 
         with pytest.raises(ValidationError, match="cannot be empty"):
-            await handler._handle_update_records_tool(
-                "res.partner", [], {"name": "test"}
-            )
+            await handler._handle_update_records_tool("res.partner", [], {"name": "test"})
 
     @pytest.mark.asyncio
     async def test_update_records_empty_values(self, handler):
@@ -146,9 +138,7 @@ class TestBulkUpdate:
 
         too_many = list(range(MAX_BULK_SIZE + 1))
         with pytest.raises(ValidationError, match="limited to"):
-            await handler._handle_update_records_tool(
-                "res.partner", too_many, {"name": "test"}
-            )
+            await handler._handle_update_records_tool("res.partner", too_many, {"name": "test"})
 
 
 class TestBulkDelete:
@@ -156,16 +146,12 @@ class TestBulkDelete:
     async def test_delete_records_success(self, handler, mock_connection):
         mock_connection.unlink.return_value = True
 
-        result = await handler._handle_delete_records_tool(
-            "res.partner", [10, 11, 12]
-        )
+        result = await handler._handle_delete_records_tool("res.partner", [10, 11, 12])
 
         assert result["success"] is True
         assert result["deleted_ids"] == [10, 11, 12]
         assert result["count"] == 3
-        mock_connection.unlink.assert_called_once_with(
-            "res.partner", [10, 11, 12]
-        )
+        mock_connection.unlink.assert_called_once_with("res.partner", [10, 11, 12])
 
     @pytest.mark.asyncio
     async def test_delete_records_empty_ids(self, handler):

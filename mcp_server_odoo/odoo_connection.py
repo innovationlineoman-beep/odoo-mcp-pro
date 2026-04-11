@@ -534,9 +534,7 @@ class OdooConnection:
                 usernames_to_try.append(lowercase)
 
             for username in usernames_to_try:
-                uid = self.common_proxy.authenticate(
-                    database, username, self.config.api_key, {}
-                )
+                uid = self.common_proxy.authenticate(database, username, self.config.api_key, {})
                 if uid:
                     self._uid = uid  # type: ignore[invalid-assignment]
                     self._database = database
@@ -751,8 +749,7 @@ class OdooConnection:
             )
         else:
             raise OdooConnectionError(
-                "No authentication method configured. "
-                "Please provide an API key in the setup page."
+                "No authentication method configured. Please provide an API key in the setup page."
             )
 
     @property

@@ -157,8 +157,8 @@ class ConnectionRegistry:
                 )
 
             msg = (
-                f"Connection to your Odoo failed.\n\n"
-                f"Details:\n" + "\n".join(f"  - {d}" for d in details) + "\n\n"
+                "Connection to your Odoo failed.\n\n"
+                "Details:\n" + "\n".join(f"  - {d}" for d in details) + "\n\n"
                 f"Error: {error_str}\n\n"
             )
             if hints:

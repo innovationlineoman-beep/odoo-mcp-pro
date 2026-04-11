@@ -612,7 +612,7 @@ class OdooToolHandler:
             Returns:
                 Server version, git commit, API version, and Odoo connection status.
             """
-            from .server import GIT_COMMIT, SERVER_VERSION, _BUILD_ORIGIN
+            from .server import _BUILD_ORIGIN, GIT_COMMIT, SERVER_VERSION
 
             try:
                 connection, _ac, _sub = await self._get_user_context()
@@ -1311,7 +1311,6 @@ class OdooToolHandler:
             logger.error(f"Error in delete_record tool: {e}")
             sanitized_msg = ErrorSanitizer.sanitize_message(str(e))
             raise ValidationError(f"Failed to delete record: {sanitized_msg}") from e
-
 
     # --- Bulk Operation Handlers ---
 

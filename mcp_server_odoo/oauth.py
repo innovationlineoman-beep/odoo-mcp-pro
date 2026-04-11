@@ -155,7 +155,7 @@ class ZitadelTokenVerifier(TokenVerifier):
 
             except httpx.TimeoutException:
                 if attempt == 0:
-                    logger.warning(f"Introspection timeout, retrying...")
+                    logger.warning("Introspection timeout, retrying...")
                     continue
                 logger.error(f"Token introspection timeout after {self.timeout}s (2 attempts)")
                 return None

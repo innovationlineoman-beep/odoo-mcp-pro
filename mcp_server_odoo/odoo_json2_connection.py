@@ -493,9 +493,7 @@ class OdooJSON2Connection:
             # via JSON/2 on this Odoo instance. Assume access is granted and let
             # the actual operation fail with a clear error if not permitted.
             if "Not found" in str(e):
-                logger.debug(
-                    f"check_access_rights not available for {model}, assuming allowed"
-                )
+                logger.debug(f"check_access_rights not available for {model}, assuming allowed")
                 return True
             return False
 

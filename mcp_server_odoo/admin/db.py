@@ -301,26 +301,28 @@ class DatabaseManager:
             name = _team_name_from_url(row["odoo_url"])
 
             # Get or create team
-            team = await conn.fetchrow(
-                "SELECT id FROM teams WHERE odoo_url = $1", normalized_url
-            )
+            team = await conn.fetchrow("SELECT id FROM teams WHERE odoo_url = $1", normalized_url)
             if not team:
                 team = await conn.fetchrow(
                     """INSERT INTO teams (name, odoo_url, created_by_sub)
                        VALUES ($1, $2, $3) RETURNING id""",
-                    name, normalized_url, row["zitadel_sub"],
+                    name,
+                    normalized_url,
+                    row["zitadel_sub"],
                 )
                 # First user for this team = admin
                 await conn.execute(
                     "UPDATE user_connections SET team_id = $1, team_role = 'admin' WHERE id = $2",
-                    team["id"], row["id"],
+                    team["id"],
+                    row["id"],
                 )
                 logger.info(f"Created team '{name}' ({normalized_url}), admin: {row['email']}")
             else:
                 # Subsequent users = member
                 await conn.execute(
                     "UPDATE user_connections SET team_id = $1, team_role = 'member' WHERE id = $2",
-                    team["id"], row["id"],
+                    team["id"],
+                    row["id"],
                 )
 
     async def _backfill_profiles(self, conn):
@@ -341,8 +343,11 @@ class DatabaseManager:
             await conn.execute(
                 """INSERT INTO connection_profiles (zitadel_sub, label, odoo_url, odoo_api_key, odoo_db)
                    VALUES ($1, $2, $3, $4, $5)""",
-                row["zitadel_sub"], label, _normalize_odoo_url(row["odoo_url"]),
-                row["odoo_api_key"], row["odoo_db"],
+                row["zitadel_sub"],
+                label,
+                _normalize_odoo_url(row["odoo_url"]),
+                row["odoo_api_key"],
+                row["odoo_db"],
             )
 
     # --- User Connections (self-service, one per user) ---
@@ -409,8 +414,13 @@ class DatabaseManager:
                            is_active = TRUE,
                            updated_at = NOW()
                        RETURNING *""",
-                    zitadel_sub, email, odoo_url, encrypted_key,
-                    odoo_db or None, team.id, role,
+                    zitadel_sub,
+                    email,
+                    odoo_url,
+                    encrypted_key,
+                    odoo_db or None,
+                    team.id,
+                    role,
                 )
             else:
                 row = await conn.fetchrow(
@@ -425,8 +435,12 @@ class DatabaseManager:
                            is_active = TRUE,
                            updated_at = NOW()
                        RETURNING *""",
-                    zitadel_sub, email, odoo_url, encrypted_key,
-                    odoo_db or None, team.id,
+                    zitadel_sub,
+                    email,
+                    odoo_url,
+                    encrypted_key,
+                    odoo_db or None,
+                    team.id,
                 )
 
             uc = UserConnection(**dict(row))
@@ -520,7 +534,9 @@ class DatabaseManager:
                    VALUES ($1, $2, $3)
                    ON CONFLICT (odoo_url) DO UPDATE SET name = teams.name
                    RETURNING *""",
-                name, normalized, created_by_sub,
+                name,
+                normalized,
+                created_by_sub,
             )
             return Team(**dict(row))
 
@@ -550,7 +566,8 @@ class DatabaseManager:
     async def get_team_members(self, team_id: int) -> list:
         """Get all members of a team with usage stats."""
         async with self._pool.acquire() as conn:
-            rows = await conn.fetch("""
+            rows = await conn.fetch(
+                """
                 SELECT
                     uc.id, uc.zitadel_sub, uc.email, uc.odoo_url, uc.is_active,
                     uc.created_at, uc.last_verified_at, uc.last_error,
@@ -564,7 +581,9 @@ class DatabaseManager:
                 ) u ON uc.zitadel_sub = u.zitadel_sub
                 WHERE uc.team_id = $1
                 ORDER BY uc.created_at ASC
-            """, team_id)
+            """,
+                team_id,
+            )
             return [dict(row) for row in rows]
 
     async def remove_member_from_team(self, connection_id: int, team_id: int) -> bool:
@@ -572,7 +591,8 @@ class DatabaseManager:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 "DELETE FROM user_connections WHERE id = $1 AND team_id = $2",
-                connection_id, team_id,
+                connection_id,
+                team_id,
             )
             return result == "DELETE 1"
 
@@ -587,15 +607,17 @@ class DatabaseManager:
                 """INSERT INTO invites (team_id, email, invite_token, invited_by, expires_at)
                    VALUES ($1, $2, $3, $4, $5)
                    RETURNING *""",
-                team_id, email, token, invited_by, expires_at,
+                team_id,
+                email,
+                token,
+                invited_by,
+                expires_at,
             )
             return Invite(**dict(row))
 
     async def get_invite_by_token(self, token: str) -> Optional[Invite]:
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM invites WHERE invite_token = $1", token
-            )
+            row = await conn.fetchrow("SELECT * FROM invites WHERE invite_token = $1", token)
             return Invite(**dict(row)) if row else None
 
     async def accept_invite(self, token: str, zitadel_sub: str) -> Optional[Invite]:
@@ -623,14 +645,20 @@ class DatabaseManager:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 "DELETE FROM invites WHERE id = $1 AND team_id = $2 AND accepted_at IS NULL",
-                invite_id, team_id,
+                invite_id,
+                team_id,
             )
             return result == "DELETE 1"
 
     # --- Connection Profiles ---
 
     async def upsert_profile(
-        self, zitadel_sub: str, label: str, odoo_url: str, odoo_api_key: str, odoo_db: Optional[str] = None
+        self,
+        zitadel_sub: str,
+        label: str,
+        odoo_url: str,
+        odoo_api_key: str,
+        odoo_db: Optional[str] = None,
     ) -> ConnectionProfile:
         """Save or update a connection profile."""
         encrypted_key = encrypt_api_key(odoo_api_key)
@@ -639,19 +667,28 @@ class DatabaseManager:
             # Check if profile with same label exists for this user
             existing = await conn.fetchrow(
                 "SELECT id FROM connection_profiles WHERE zitadel_sub = $1 AND label = $2",
-                zitadel_sub, label,
+                zitadel_sub,
+                label,
             )
             if existing:
                 row = await conn.fetchrow(
                     """UPDATE connection_profiles SET odoo_url = $3, odoo_api_key = $4, odoo_db = $5
                        WHERE id = $1 AND zitadel_sub = $2 RETURNING *""",
-                    existing["id"], zitadel_sub, normalized_url, encrypted_key, odoo_db,
+                    existing["id"],
+                    zitadel_sub,
+                    normalized_url,
+                    encrypted_key,
+                    odoo_db,
                 )
             else:
                 row = await conn.fetchrow(
                     """INSERT INTO connection_profiles (zitadel_sub, label, odoo_url, odoo_api_key, odoo_db)
                        VALUES ($1, $2, $3, $4, $5) RETURNING *""",
-                    zitadel_sub, label, normalized_url, encrypted_key, odoo_db,
+                    zitadel_sub,
+                    label,
+                    normalized_url,
+                    encrypted_key,
+                    odoo_db,
                 )
             profile = ConnectionProfile(**dict(row))
             profile.odoo_api_key = decrypt_api_key(profile.odoo_api_key)
@@ -674,7 +711,8 @@ class DatabaseManager:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT * FROM connection_profiles WHERE id = $1 AND zitadel_sub = $2",
-                profile_id, zitadel_sub,
+                profile_id,
+                zitadel_sub,
             )
             if not row:
                 return None
@@ -686,20 +724,26 @@ class DatabaseManager:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 "DELETE FROM connection_profiles WHERE id = $1 AND zitadel_sub = $2",
-                profile_id, zitadel_sub,
+                profile_id,
+                zitadel_sub,
             )
             return result == "DELETE 1"
 
     # --- PKCE State (persistent, survives deploys) ---
 
-    async def store_pending_auth(self, state: str, code_verifier: str, redirect_uri: str, next_url: str = ""):
+    async def store_pending_auth(
+        self, state: str, code_verifier: str, redirect_uri: str, next_url: str = ""
+    ):
         """Store PKCE state for OAuth callback."""
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """INSERT INTO pending_auth (state, code_verifier, redirect_uri, next_url)
                    VALUES ($1, $2, $3, $4)
                    ON CONFLICT (state) DO UPDATE SET code_verifier=$2, redirect_uri=$3, next_url=$4, created_at=NOW()""",
-                state, code_verifier, redirect_uri, next_url,
+                state,
+                code_verifier,
+                redirect_uri,
+                next_url,
             )
 
     async def pop_pending_auth(self, state: str) -> Optional[dict]:
@@ -713,12 +757,18 @@ class DatabaseManager:
             )
             if not row:
                 return None
-            return {"code_verifier": row["code_verifier"], "redirect_uri": row["redirect_uri"], "next": row["next_url"]}
+            return {
+                "code_verifier": row["code_verifier"],
+                "redirect_uri": row["redirect_uri"],
+                "next": row["next_url"],
+            }
 
     async def cleanup_expired_auth(self):
         """Remove expired PKCE states (older than 10 minutes)."""
         async with self._pool.acquire() as conn:
-            await conn.execute("DELETE FROM pending_auth WHERE created_at < NOW() - interval '10 minutes'")
+            await conn.execute(
+                "DELETE FROM pending_auth WHERE created_at < NOW() - interval '10 minutes'"
+            )
 
     # --- Dashboard (super admin) ---
 
