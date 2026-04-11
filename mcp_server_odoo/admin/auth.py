@@ -26,9 +26,10 @@ SESSION_COOKIE = "admin_session"
 # Session max age: 8 hours
 SESSION_MAX_AGE = 8 * 60 * 60
 
-# PKCE state storage (in-memory, per-process)
-# Maps state -> {code_verifier, redirect_uri}
+# PKCE state: stored in Postgres via db_manager (survives blue-green deploys)
+# Fallback in-memory dict for when db_manager is not yet available
 _pending_auth: dict[str, dict] = {}
+_db_manager = None
 
 
 def _get_serializer() -> URLSafeTimedSerializer:
@@ -168,6 +169,8 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
         db_manager: DatabaseManager for admin checks
         zitadel_issuer_url: Zitadel issuer URL (e.g. https://my-instance.zitadel.cloud)
     """
+    global _db_manager
+    _db_manager = db_manager
     issuer = zitadel_issuer_url.rstrip("/")
     client_id = os.getenv("ADMIN_OAUTH_CLIENT_ID", "").strip()
     base_url = os.getenv("ADMIN_BASE_URL", "http://localhost:8000").rstrip("/")
@@ -212,13 +215,12 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
         state = secrets.token_urlsafe(32)
         redirect_uri = f"{base_url}/admin/callback"
 
-        # Store PKCE verifier keyed by state
+        # Store PKCE verifier keyed by state (in Postgres, survives deploys)
         next_url = request.query_params.get("next", "")
-        _pending_auth[state] = {
-            "code_verifier": code_verifier,
-            "redirect_uri": redirect_uri,
-            "next": next_url,
-        }
+        if _db_manager:
+            await _db_manager.store_pending_auth(state, code_verifier, redirect_uri, next_url)
+        else:
+            _pending_auth[state] = {"code_verifier": code_verifier, "redirect_uri": redirect_uri, "next": next_url}
 
         # Build authorization URL
         action = request.query_params.get("action", "")
@@ -259,11 +261,14 @@ def register_auth_routes(app, db_manager, zitadel_issuer_url: str):
             track_event("auth_callback_error", properties={"error": "missing_code_or_state"})
             return RedirectResponse(url="/admin/login", status_code=302)
 
-        # Validate state and get PKCE verifier
-        pending = _pending_auth.pop(state, None)
+        # Validate state and get PKCE verifier (from Postgres, survives deploys)
+        if _db_manager:
+            pending = await _db_manager.pop_pending_auth(state)
+        else:
+            pending = _pending_auth.pop(state, None)
         if not pending:
-            logger.warning(f"Invalid or expired OAuth state (pending_count={len(_pending_auth)})")
-            track_event("auth_state_invalid", properties={"pending_count": len(_pending_auth)})
+            logger.warning("Invalid or expired OAuth state")
+            track_event("auth_state_invalid")
             return RedirectResponse(url="/admin/login", status_code=302)
 
         # Exchange code for tokens

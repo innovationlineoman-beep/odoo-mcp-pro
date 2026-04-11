@@ -132,6 +132,15 @@ CREATE TABLE IF NOT EXISTS connection_profiles (
     created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_profiles_sub ON connection_profiles (zitadel_sub);
+
+-- v9: Persistent PKCE state (survives blue-green deploys)
+CREATE TABLE IF NOT EXISTS pending_auth (
+    state        TEXT PRIMARY KEY,
+    code_verifier TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    next_url     TEXT DEFAULT '',
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+);
 """
 
 INVITE_EXPIRY_DAYS = 7
@@ -680,6 +689,36 @@ class DatabaseManager:
                 profile_id, zitadel_sub,
             )
             return result == "DELETE 1"
+
+    # --- PKCE State (persistent, survives deploys) ---
+
+    async def store_pending_auth(self, state: str, code_verifier: str, redirect_uri: str, next_url: str = ""):
+        """Store PKCE state for OAuth callback."""
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO pending_auth (state, code_verifier, redirect_uri, next_url)
+                   VALUES ($1, $2, $3, $4)
+                   ON CONFLICT (state) DO UPDATE SET code_verifier=$2, redirect_uri=$3, next_url=$4, created_at=NOW()""",
+                state, code_verifier, redirect_uri, next_url,
+            )
+
+    async def pop_pending_auth(self, state: str) -> Optional[dict]:
+        """Retrieve and delete PKCE state. Returns None if not found or expired (>10 min)."""
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """DELETE FROM pending_auth
+                   WHERE state = $1 AND created_at > NOW() - interval '10 minutes'
+                   RETURNING code_verifier, redirect_uri, next_url""",
+                state,
+            )
+            if not row:
+                return None
+            return {"code_verifier": row["code_verifier"], "redirect_uri": row["redirect_uri"], "next": row["next_url"]}
+
+    async def cleanup_expired_auth(self):
+        """Remove expired PKCE states (older than 10 minutes)."""
+        async with self._pool.acquire() as conn:
+            await conn.execute("DELETE FROM pending_auth WHERE created_at < NOW() - interval '10 minutes'")
 
     # --- Dashboard (super admin) ---
 
