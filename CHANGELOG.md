@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-04-17
+
+### Changed
+- **Pricing update**: Pro is now EUR 25/user/month (was EUR 5), Max is EUR 100/user/month (was EUR 25)
+- **Plan features unified**: all plans (Free, Pro, Max) now include unlimited connections and team management — daily call limit and priority support (Max only) are the remaining differentiators
+
+## [1.3.0] - 2026-04-16
+
+### Added
+- **Billing & subscriptions**: Free, Pro (EUR 25/user/mo), and Max (EUR 100/user/mo) plans with Stripe Checkout and Customer Portal
+- **Usage tracking**: daily call counter with progress bar, rate limiting per plan (50 / 500 / 5,000 calls/day)
+- **Rate limit upgrade CTA**: when you hit your daily limit, the error message includes a direct link to upgrade
+- **Team invites via email**: invite colleagues by email with a branded landing page (powered by Brevo)
+- **Multiple connections**: save and switch between Odoo instances without disconnecting Claude
+- **Progressive setup validation**: step-by-step connection setup with live URL detection, version check, and auth test
+- **Database name help**: guidance for self-hosted users who need to specify a database name
+- **Plan badge in sidebar**: always see your current plan and today's usage at a glance
+
+### Changed
+- **Teams available on all plans**: teams and unlimited connections are no longer gated behind paid plans
+- **Simplified team UI**: removed member/admin role distinction — all team members are equal
+- **Billing page redesign**: clean plan comparison cards with current plan highlighting (Vercel-inspired)
+- **Setup instructions**: detailed step-by-step Claude connector guide (profile → settings → connectors → add → connect)
+- **Invite landing page**: says "sign in or create account" instead of just "sign up"
+- **Stripe opens in new tab**: checkout and customer portal open in a new window so you don't lose your place
+
+### Fixed
+- **New users get Free plan**: previously new registrations had no plan assigned, breaking rate limiting
+- **Billing buttons**: return proper JSON errors for AJAX requests instead of HTML error pages
+- **Registration blocked**: removed Zitadel org scope that prevented new users from signing up
+
 ## [1.2.1] - 2026-04-11
 
 ### Added
