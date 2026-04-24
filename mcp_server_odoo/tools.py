@@ -897,23 +897,36 @@ class OdooToolHandler:
             """Upload bytes into a Binary or Image field on an existing record.
 
             Use this for: avatar/logo on res.partner, product images on product.template,
-            company logo, attachment bytes on custom Binary fields, etc. The bytes are
-            fetched or decoded server-side so you never pass base64 through the tool call.
+            company logo, attachment bytes on custom Binary fields.
 
-            For res.partner avatars: pass field_name='image_1920'. The avatar_* fields
-            are computed from image_1920 and will auto-resize once image_1920 is written.
-            If you pass 'avatar_1920' this tool will auto-redirect to 'image_1920' and
-            return a warning.
+            IMPORTANT — bytes must NOT pass through the model. `source` must be an
+            http(s) URL; the server fetches the bytes from that URL directly and
+            streams them to Odoo. Do NOT base64-encode a local file and paste it
+            into this call — LLMs are for reasoning, not binary transport.
 
-            For attaching documents (PDFs, etc.) to records, use create_record on
-            ir.attachment with {name, datas, res_model, res_id} instead.
+            If the user has a local file without a URL, direct them to upload it
+            somewhere reachable first: a Google Drive share link (direct download),
+            Dropbox direct link, S3 pre-signed URL, Imgur, etc. They then give you
+            the URL.
+
+            For BULK import of files/documents into Odoo, use the Documents app
+            (`documents.document`) — users can drop files into a Documents folder
+            directly through the Odoo UI or a share-link, and you can then query
+            the resulting records via search_records.
+
+            For res.partner avatars: pass field_name='image_1920'. The avatar_*
+            fields are computed from image_1920 and auto-resize. If you pass
+            'avatar_1920' this tool auto-redirects to 'image_1920' and warns.
+
+            For attaching PDFs/documents to a specific record (e.g. a bonnetje
+            on a sale.order), use create_record on ir.attachment with
+            {name, datas, res_model, res_id} instead.
 
             Args:
                 model: Odoo model name (e.g. 'res.partner', 'product.template')
                 record_id: ID of the record to update
                 field_name: Binary or Image field name on that model
-                source: Either an http(s) URL the server will fetch, or a data URI
-                    like 'data:image/png;base64,iVBOR...'. Max 25 MB after decode.
+                source: http(s) URL the server will fetch. Max 25 MB.
 
             Returns:
                 Written field name, size in bytes, and record URL.
@@ -1642,9 +1655,10 @@ class OdooToolHandler:
     ) -> Dict[str, Any]:
         """Handle set_binary_field tool request.
 
-        Fetches/decodes bytes from `source` (http(s) URL or data: URI),
-        validates the target field is Binary/Image, auto-redirects avatar_*
-        writes to image_1920, and writes the base64 string via connection.write.
+        Fetches bytes from `source` (http(s) URL only — data: URIs are rejected
+        so bytes never pass through the LLM), validates the target field is
+        Binary/Image, auto-redirects avatar_* writes to image_1920, and writes
+        the base64 string via connection.write.
         """
         try:
             connection, access_controller, sub = await self._get_user_context()
@@ -1655,58 +1669,50 @@ class OdooToolHandler:
                 if not field_name:
                     raise ValidationError("field_name is required")
                 if not source:
-                    raise ValidationError("source is required (http(s) URL or data: URI)")
+                    raise ValidationError("source is required (http(s) URL)")
 
-                # --- Fetch/decode bytes ---
-                raw_bytes: bytes
+                # --- Fetch bytes from URL ---
+                # Reject data: URIs: they would force the LLM to carry the full
+                # base64 payload in the tool call, which defeats the purpose of
+                # this tool. The user should upload the file somewhere reachable
+                # (Drive/Dropbox/S3/etc.) and pass the URL.
                 if source.startswith("data:"):
-                    # data:[<mediatype>][;base64],<data>
-                    try:
-                        header, _, payload = source.partition(",")
-                        if ";base64" not in header:
-                            raise ValidationError(
-                                "data: URI must be base64-encoded (e.g. 'data:image/png;base64,...')"
-                            )
-                        raw_bytes = base64.b64decode(payload, validate=True)
-                    except (ValueError, TypeError) as e:
-                        raise ValidationError(f"Invalid data: URI: {e}") from e
-                else:
-                    parsed = urlparse(source)
-                    if parsed.scheme not in ("http", "https"):
-                        raise ValidationError(
-                            f"source must be an http(s) URL or data: URI, got scheme '{parsed.scheme}'"
-                        )
-                    if not parsed.netloc:
-                        raise ValidationError("source URL is missing a host")
-                    try:
-                        async with httpx.AsyncClient(
-                            timeout=30.0,
-                            follow_redirects=True,
-                            max_redirects=5,
-                        ) as client:
-                            chunks: List[bytes] = []
-                            total = 0
-                            async with client.stream("GET", source) as resp:
-                                resp.raise_for_status()
-                                async for chunk in resp.aiter_bytes(chunk_size=65536):
-                                    total += len(chunk)
-                                    if total > MAX_BINARY_SIZE_BYTES:
-                                        raise ValidationError(
-                                            f"Source exceeds max size of "
-                                            f"{MAX_BINARY_SIZE_BYTES // (1024 * 1024)} MB"
-                                        )
-                                    chunks.append(chunk)
-                            raw_bytes = b"".join(chunks)
-                    except ValidationError:
-                        raise
-                    except httpx.HTTPError as e:
-                        raise ValidationError(f"Failed to fetch source URL: {e}") from e
-
-                if len(raw_bytes) > MAX_BINARY_SIZE_BYTES:
                     raise ValidationError(
-                        f"Decoded bytes exceed max size of "
-                        f"{MAX_BINARY_SIZE_BYTES // (1024 * 1024)} MB"
+                        "data: URIs are not accepted — bytes must not pass through the "
+                        "LLM. Upload the file to a reachable URL (Google Drive share, "
+                        "Dropbox direct link, S3 pre-signed URL, etc.) and pass the URL."
                     )
+                parsed = urlparse(source)
+                if parsed.scheme not in ("http", "https"):
+                    raise ValidationError(
+                        f"source must be an http(s) URL, got scheme '{parsed.scheme}'"
+                    )
+                if not parsed.netloc:
+                    raise ValidationError("source URL is missing a host")
+                try:
+                    async with httpx.AsyncClient(
+                        timeout=30.0,
+                        follow_redirects=True,
+                        max_redirects=5,
+                    ) as client:
+                        chunks: List[bytes] = []
+                        total = 0
+                        async with client.stream("GET", source) as resp:
+                            resp.raise_for_status()
+                            async for chunk in resp.aiter_bytes(chunk_size=65536):
+                                total += len(chunk)
+                                if total > MAX_BINARY_SIZE_BYTES:
+                                    raise ValidationError(
+                                        f"Source exceeds max size of "
+                                        f"{MAX_BINARY_SIZE_BYTES // (1024 * 1024)} MB"
+                                    )
+                                chunks.append(chunk)
+                        raw_bytes = b"".join(chunks)
+                except ValidationError:
+                    raise
+                except httpx.HTTPError as e:
+                    raise ValidationError(f"Failed to fetch source URL: {e}") from e
+
                 if not raw_bytes:
                     raise ValidationError("Source produced zero bytes")
 
